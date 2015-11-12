@@ -1,0 +1,257 @@
+#!/usr/bin/perl -w
+#laddar ner studentportalen-filareor
+#Copyright 2015 Per Eric Rosén per@rosnix.net
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+use strict;
+use utf8;
+
+use LWP;
+use LWP::UserAgent;
+use Getopt::Long;
+use HTML::Entities;
+require HTTP::Date;
+use URI::URL;
+use URI::Escape;
+use Encode;
+
+# -- init --
+
+binmode(STDOUT,":utf8");
+binmode(STDERR,":utf8");
+
+# defaultvärden
+my $version='0.1';
+my $agent="Mozilla/4.0%20(compatible;stp-mirror $version file area mirror utility)";
+my $config="$ENV{HOME}/.stp-mirror";
+my $config_file="$config/account.conf";
+my $verbose=0;
+
+# argument
+GetOptions(
+    'v|verbose'=>sub{$verbose++},
+    'h|help'=>sub{
+	print "stp-mirror <https://studentportalen.uu.se/...>\n";
+	print "-v --verbose  increase verbosity\n";
+	print "-h --help     show this help\n";
+	exit;
+    },
+);
+my $page=shift() or die "error: please enter a studentportalen.uu.se course page\n";
+
+# säkerställer inställningsfil
+-d $config or mkdir($config) or die "error: could not create settings folder: $!\n";
+if(not -f "$config/account.conf"){
+    open F,">$config_file" or die "error: could not write to $config_file: $!\n";
+    print F "# your studentportalen.uu.se username (wwwwdddd)\n";
+    print F "login=\"\"\n";
+    print F "# the corresponding password\n";
+    print F "password=\"\"\n";
+    close F;
+};
+
+# hämta data från inställningsfil
+open F,"$config_file" or die "error: could not read $config_file: $!\n";
+my $config_data=join('',<F>);
+close F;
+$config_data=~/^\s*login\s*=\s*\"?(.+?)\".*$/sm or die "no login found in $config_file\n";
+my $login=$1;
+$config_data=~/^\s*password\s*=\s*\"?(.+?)\".*$/sm or die "no password found in $config_file\n";
+my $password=$1;
+
+# LWP
+my $ua=new Agent();
+$ua->agent($agent);
+$ua->cookie_jar({file=>"$config/cookies.txt",autosave=>1,ignore_discard=>1});
+$ua->requests_redirectable(['GET','HEAD','POST']);
+
+# ---- main ----
+
+# hämtar kurssida
+$verbose and warn "checking start page\n";
+my $response=$ua->get($page);
+if(!$response->is_success){
+    die "error: http error: ".$response->status_line."\n";
+};
+
+# provar att logga in vid behov
+if(not $response->decoded_content=~/class="logout"/){
+    $response=login($response);
+};
+
+if($response->decoded_content=~/class="logout"/){
+    warn "start page OK\n";
+}
+else{
+    die "error: login failed\n";
+}
+
+# hämtar filareor
+my $done={};
+my $c=$response->decoded_content;
+while ($c=~m|<a.*?[\s\r\n]*href="(/portal/portal/uusp/student/filearea\?.*?)"[\s\r\n]*.*?[\r\n\s]*>[\s\r\n]*<span .*?>(.*?)</span>[\s\r\n]*</a>|g){
+    my $title=slugify($2);
+    my $url=url(decode_entities($1),$response->base)->abs->as_string;
+    download($url,$done,$title,'','');
+};
+
+# ---- funktioner ----
+
+sub slugify{
+    my $title=shift() or die;
+    # retur : filnamn av title
+
+    chomp($title);
+    $title=~s/\s*\-\s*/\-/g;
+    $title=~tr/ 0-9a-zA-ZåäöÅÄÖ\-\_\./_/c;
+    $title=~s/[\:\;]/ /g;
+    # tar bort inledande punkt (viktigt)
+    $title=~s/^\.//;
+    # rensar mellanrum och punkter i övrigt
+    $title=~s/\.$//;
+    $title=~s/\.{2,}/\./g;
+    $title=~s/\s{2,}/ /g;
+    return $title;
+}
+
+sub download{
+    my $url=shift() or die;
+    my $done=shift() or die;
+    my $title=shift() or die;
+    my $indent=shift() // '';
+    my $path=shift() // '';
+    # effekt: laddar ner url till title, ev med sökväg path
+    # pre   : title och path är slugifierade och säkra att spara. url absolut
+
+    # markerar påbörjad
+    defined($done->{$url}) and return;
+    $done->{$url}=1;
+
+    # påbörjar nerladdning
+    my @headers=();
+    if(-f "$path$title"){
+	my @stat=stat("$path$title");
+	my $mtime=$stat[9];
+	@headers=(@headers,'If-Modified-Since'=>HTTP::Date::time2str($mtime));
+    };
+    
+    # laddar ner
+    $verbose and print STDERR "downloading \"$path$title\" ... ";
+    my $response=$ua->get($url,@headers);
+    if($response->code == 304){
+	warn "not changed\n";
+	return;
+    }
+    if(!$response->is_success){
+	warn "\n";
+	die "error: http error: ".$response->status_line."\n";
+    };
+    warn "OK\n";
+
+    # undersöker om fil ska laddas ner eller följas
+    if($response->content_type ne 'text/html' or !($response->decoded_content=~/class="logout"/)){
+	# sparar filer
+	system('mkdir','-p',$path);
+	open F,">$path$title" or die "error: can't write to $1\n";
+	binmode F;
+	print F $response->decoded_content(charset=>'none');
+	close F;
+
+	# sätter datum på sparad fil
+	# notering : studentportalen verkar visa GMT-tid i filöversikten
+	if($response->header('last-modified')){
+	    my $mtime=HTTP::Date::str2time($response->header('last-modified'));
+	    utime(time(),$mtime,"$path$title");
+	};
+    }
+    else{
+	# tolkar innehåll
+	my $link_path=$path.$title."/";
+	my $link_indent=$indent."  ";
+	my $c=$response->decoded_content;
+	while ($c=~m|<td\b.*?>(.*?)</td>|sg){
+	    my $td=$1;
+	    if($td=~m|href="(/portal/authsec/portal/uusp/student/filearea/filearea-window\?\S*?)"\s*>[\s\r\n]*<b>(.*?)</b>|s){
+		my $link_url=url(decode_entities($1),$response->base)->abs->as_string;
+		my $link_title=slugify($2);
+		download($link_url,$done,$link_title,$link_indent,$link_path);
+	    };
+	};
+    };
+};
+
+sub login{
+    my $response=shift() or die;
+    # effekt: logga in baserat på response
+    # retur : nytt response med sida efter inloggning 
+
+    $verbose and warn "logging in\n";
+
+    # kontrollerar huvudsida
+    $response->decoded_content=~/id="loginLink" href="(.*?)"/ or die "error: unknown format on main page - perhaps this tool is old\n";
+    my $login_link=url(decode_entities($1),$response->base)->abs->as_string;
+
+    # hämtar login-sida (kan också vara redirect-sida)
+    $response=$ua->get($login_link);
+    if(!$response->is_success){
+	die "error: http error: ".$response->status_line."\n";
+    };
+
+    # loggar in på CAS om det behövs
+    if(not $response->decoded_content=~/name="SAMLResponse" value="(.*?)"/){
+
+	# kontrollerar login-sida
+	$response->decoded_content=~/id="login" name="login" action="(.*?)"/ or die "error: unknown format on login page - perhaps this tool is old\n";
+	my $login_action=url(decode_entities($1),$response->base)->abs->as_string;
+
+	# loggar in
+	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'submit'=>'LOGGA IN'});
+	if(!$response->is_success){
+	    die "error: http error: ".$response->status_line."\n";
+	};
+
+	# kontrollerar om login lyckades
+	my $c=$response->decoded_content;
+	if($c=~/id="login" name="login" action="(.*?)"/ and $c=~/not possible to login with supplied credentials/){
+	    die "error: username or password incorrect\n";
+	};
+    };
+
+	print $response->decoded_content;
+	
+    # hämtar värden från redirect-sida
+    $response->decoded_content=~/form action="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+    my $redir_action=decode_entities($1);
+    $response->decoded_content=~/name="RelayState" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+    my $rs=decode_entities($1);
+    $response->decoded_content=~/name="SAMLResponse" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+    my $sr=decode_entities($1);
+
+    # följer redirect
+    $response=$ua->post($redir_action,{'RelayState'=>$rs,'SAMLResponse'=>$sr,'submit'=>'Fortsätt/Continue'});
+    if(!$response->is_success){
+	die "error: http error: ".$response->status_line."\n";
+    };
+
+    return $response;
+}
+
+# ---- klass Agent ----
+
+package Agent;
+use vars qw(@ISA);
+BEGIN{
+    @ISA=("LWP::UserAgent");
+}
