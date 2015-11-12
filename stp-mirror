@@ -33,7 +33,7 @@ binmode(STDOUT,":utf8");
 binmode(STDERR,":utf8");
 
 # defaultvärden
-my $version='0.1';
+my $version='_VERSION_';
 my $agent="Mozilla/4.0%20(compatible;stp-mirror $version file area mirror utility)";
 my $config="$ENV{HOME}/.stp-mirror";
 my $config_file="$config/account.conf";
@@ -48,7 +48,7 @@ GetOptions(
 	print "-h --help     show this help\n";
 	exit;
     },
-);
+) or die "error: unknown arguments. Get help with -h\n";
 my $page=shift() or die "error: please enter a studentportalen.uu.se course page\n";
 
 # säkerställer inställningsfil
@@ -92,7 +92,7 @@ if(not $response->decoded_content=~/class="logout"/){
 };
 
 if($response->decoded_content=~/class="logout"/){
-    warn "start page OK\n";
+    $verbose and warn "start page OK\n";
 }
 else{
     die "error: login failed\n";
@@ -151,14 +151,14 @@ sub download{
     $verbose and print STDERR "downloading \"$path$title\" ... ";
     my $response=$ua->get($url,@headers);
     if($response->code == 304){
-	warn "not changed\n";
+	$verbose and warn "not changed\n";
 	return;
     }
     if(!$response->is_success){
-	warn "\n";
+	$verbose and warn "\n";
 	die "error: http error: ".$response->status_line."\n";
     };
-    warn "OK\n";
+    $verbose and warn "OK\n";
 
     # undersöker om fil ska laddas ner eller följas
     if($response->content_type ne 'text/html' or !($response->decoded_content=~/class="logout"/)){

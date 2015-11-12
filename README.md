@@ -1,5 +1,5 @@
 # stp-mirror
-Studentportalen Uppsala University file area mirror utility
+This is a small Studentportalen Uppsala University file area mirror utility. Tired of manually checking for and downloading files from studentportalen.uu.se? Use stp-mirror to sync (one-way) new and changed files from the course file areas.
 
 Requirements
 ------------
@@ -20,7 +20,7 @@ This will download all file areas of the course to the current directory.
 File names will be based on titles with some mangling of unsafe characters.
 
 If a local file already exist, only more recently updated wil be downloaded.
-The utility will however NOT check for local changes.
+The utility will however *NOT* check for local changes, and will overwrite any local file with the same name if the remote file modification date is more recent.
 
 Use at your own risk.
 
