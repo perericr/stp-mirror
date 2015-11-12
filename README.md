@@ -1,5 +1,5 @@
 # stp-mirror
-This is a small Studentportalen Uppsala University file area mirror utility. Tired of manually checking for and downloading files from studentportalen.uu.se? Use stp-mirror to sync (one-way) new and changed files from the course file areas.
+This is a small Studentportalen Uppsala University file area mirror utility. Tired of manually checking for and downloading updated files from studentportalen.uu.se? Use stp-mirror to sync (one-way) new and changed files from the course file areas.
 
 Requirements
 ------------
@@ -9,7 +9,9 @@ Getopt::Long
 
 Installation
 ------------
-copy stp-mirror to suitable bin folder
+edit Makefile if needed (probably not)
+make
+make install (will install to /usr/local/bin if root, else ~/bin)
 
 Usage
 -----
