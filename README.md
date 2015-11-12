@@ -3,20 +3,26 @@ This is a small Studentportalen Uppsala University file area mirror utility. Tir
 
 Requirements
 ------------
-LWP
-Getopt::Long
+* LWP
+* Getopt::Long
 
 
 Installation
 ------------
 edit Makefile if needed (probably not)
+```
 make
 make install (will install to /usr/local/bin if root, else ~/bin)
+```
+
+Configure stp-mirror by entering your login and password (key=value on one row each) in ~/.stp-mirror/account.conf. You may create this file by running stp-mirror.
 
 Usage
 -----
+```
 stp-mirror <url>
-Where <url> is a course homepage on studentportalen.uu.se.
+```
+Where url is a course homepage on studentportalen.uu.se.
 
 This will download all file areas of the course to the current directory.
 File names will be based on titles with some mangling of unsafe characters.
