@@ -20,7 +20,7 @@ Configure stp-mirror by entering your login and password (key=value on one row e
 Usage
 -----
 ```
-stp-mirror <url>
+stp-mirror [-v] [-v] <url>
 ```
 Where url is a course homepage on studentportalen.uu.se.
 
