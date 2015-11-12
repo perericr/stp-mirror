@@ -46,7 +46,7 @@ GetOptions(
     'v|verbose'=>sub{$verbose++},
     'h|help'=>sub{
 	print "stp-mirror <https://studentportalen.uu.se/...>\n";
-	print "-v --verbose  increase verbosity\n";
+	print "-v --verbose  increase verbosity (can be used multiple times)\n";
 	print "-h --help     show this help\n";
 	exit;
     },
@@ -82,7 +82,7 @@ $ua->requests_redirectable(['GET','HEAD','POST']);
 # ---- main ----
 
 # hämtar kurssida
-$verbose and warn "checking start page\n";
+$verbose > 1 and warn "checking start page\n";
 my $response=$ua->get($page);
 if(!$response->is_success){
     die "error: http error: ".$response->status_line."\n";
@@ -94,7 +94,7 @@ if(not $response->decoded_content=~/class="logout"/){
 };
 
 if($response->decoded_content=~/class="logout"/){
-    $verbose and warn "start page OK\n";
+    $verbose > 1 and warn "start page OK\n";
 }
 else{
     die "error: login failed\n";
@@ -159,15 +159,15 @@ sub download{
     };
     
     # laddar ner
-    $verbose and print STDERR "downloading \"$path$title\" ... ";
+    $verbose > 1 and print STDERR "downloading \"$path$title\" ... ";
 
     my $response=download_get($url,$headers);
     if($response->code == 304){
-	$verbose and warn "not changed\n";
+	$verbose > 1 and warn "not changed\n";
 	return;
     };
     if(!$response->is_success){
-	$verbose and warn "\n";
+	$verbose > 1 and warn "\n";
 	die "error: http error: ".$response->status_line."\n";
     };
 
@@ -186,7 +186,8 @@ sub download{
 	    my $mtime=HTTP::Date::str2time($response->header('last-modified'));
 	    utime(time(),$mtime,"$path$title");
 	};
-	$verbose and warn "OK\n";
+	$verbose > 1 and warn "OK\n";
+	$verbose == 1 and warn "downloaded \"$path$title\"\n";
     }
     else{
 	# tolkar innehåll
@@ -206,7 +207,7 @@ sub download{
 	    };
 	};
 
-	$verbose and warn "found ".(scalar @items)." items\n";
+	$verbose > 1 and warn "found ".(scalar @items)." items\n";
 
 	# gör mapp oavsett innehåll eller ej
 	ensure_dir("$path$title");
@@ -229,7 +230,7 @@ sub download_get{
 	splice(@downloads,0,(@downloads-10));
 	my $sleep=int(10/$rate_limit-(time()-$downloads[0]));
 	if($sleep > 0){
-	    $verbose and print STDERR "waiting ${sleep}s ... ";
+	    $verbose > 1 and print STDERR "waiting ${sleep}s ... ";
 	    sleep $sleep;
 	};
     };
@@ -243,12 +244,12 @@ sub download_get{
     if($response->content_type eq 'text/html' and $response->decoded_content=~/div class="notAuthorization"/){
 	if($try < 5){
 	    my $sleep=10*($try+1);
-	    $verbose and print STDERR "too fast for server, waiting ${sleep}s ... ";
+	    $verbose > 1 and print STDERR "too fast for server, waiting ${sleep}s ... ";
 	    sleep $sleep;
 	    return download_get($url,$headers,$try+1);
 	}
 	else{
-	    $verbose and warn "\n";
+	    $verbose > 1 and warn "\n";
 	    die "error: persistent rate limit page found\n";
 	};
     };
@@ -261,7 +262,7 @@ sub login{
     # effekt: logga in baserat på response
     # retur : nytt response med sida efter inloggning 
 
-    $verbose and warn "logging in\n";
+    $verbose > 1 and warn "logging in\n";
 
     # kontrollerar huvudsida
     $response->decoded_content=~/id="loginLink" href="(.*?)"/ or die "error: unknown format on main page - perhaps this tool is old\n";
