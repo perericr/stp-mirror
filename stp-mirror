@@ -115,8 +115,8 @@ sub slugify{
 
     chomp($title);
     $title=~s/\s*\-\s*/\-/g;
+    $title=~s/[\:\;\,]\s*/-/g;
     $title=~tr/ 0-9a-zA-ZåäöÅÄÖ\-\_\./_/c;
-    $title=~s/[\:\;]/ /g;
     # tar bort inledande punkt (viktigt)
     $title=~s/^\.//;
     # rensar mellanrum och punkter i övrigt
@@ -124,6 +124,15 @@ sub slugify{
     $title=~s/\.{2,}/\./g;
     $title=~s/\s{2,}/ /g;
     return $title;
+}
+
+sub ensure_dir{
+    defined(my $dir=shift()) or die;
+    # effekt : ser till att ev mapp dir finns
+
+    if($dir){
+	system('mkdir','-p',$dir) >> 8 and die "error: can't make folder $dir $!\n";
+    };
 }
 
 sub download{
@@ -158,12 +167,12 @@ sub download{
 	$verbose and warn "\n";
 	die "error: http error: ".$response->status_line."\n";
     };
-    $verbose and warn "OK\n";
+
 
     # undersöker om fil ska laddas ner eller följas
-    if($response->content_type ne 'text/html' or !($response->decoded_content=~/class="logout"/)){
+    if($response->content_type ne 'text/html'){
 	# sparar filer
-	system('mkdir','-p',$path);
+	ensure_dir($path);
 	open F,">$path$title" or die "error: can't write to $1\n";
 	binmode F;
 	print F $response->decoded_content(charset=>'none');
@@ -175,19 +184,32 @@ sub download{
 	    my $mtime=HTTP::Date::str2time($response->header('last-modified'));
 	    utime(time(),$mtime,"$path$title");
 	};
+	$verbose and warn "OK\n";
     }
     else{
 	# tolkar innehåll
 	my $link_path=$path.$title."/";
 	my $link_indent=$indent."  ";
 	my $c=$response->decoded_content;
+	my @items;
+	
 	while ($c=~m|<td\b.*?>(.*?)</td>|sg){
 	    my $td=$1;
 	    if($td=~m|href="(/portal/authsec/portal/uusp/student/filearea/filearea-window\?\S*?)"\s*>[\s\r\n]*<b>(.*?)</b>|s){
 		my $link_url=url(decode_entities($1),$response->base)->abs->as_string;
 		my $link_title=slugify($2);
-		download($link_url,$done,$link_title,$link_indent,$link_path);
+		push @items,[$link_url,$done,$link_title,$link_indent,$link_path];
 	    };
+	};
+
+	$verbose and warn "found ".(scalar @items)." items\n";
+
+	# gör mapp oavsett innehåll eller ej
+	ensure_dir("$path$title");
+
+	# laddar ner innehåll
+	for my $item (@items){
+	    download(@$item);
 	};
     };
 };

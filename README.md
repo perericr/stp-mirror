@@ -26,6 +26,10 @@ The utility will however *NOT* check for local changes, and will overwrite any l
 
 Use at your own risk.
 
+Limitations
+-----------
+Deleted or moved files on the server side will stay in the download folder using their old name.
+
 Questions?
 ----------
 Contact Per Eric Rosén (per@rosnix.net)
