@@ -38,6 +38,8 @@ my $agent="Mozilla/4.0%20(compatible;stp-mirror $version file area mirror utilit
 my $config="$ENV{HOME}/.stp-mirror";
 my $config_file="$config/account.conf";
 my $verbose=0;
+my $rate_limit=2;
+my @downloads=();
 
 # argument
 GetOptions(
@@ -149,27 +151,27 @@ sub download{
     $done->{$url}=1;
 
     # påbörjar nerladdning
-    my @headers=();
+    my $headers=[];
     if(-f "$path$title"){
 	my @stat=stat("$path$title");
 	my $mtime=$stat[9];
-	@headers=(@headers,'If-Modified-Since'=>HTTP::Date::time2str($mtime));
+	@$headers=(@$headers,'If-Modified-Since'=>HTTP::Date::time2str($mtime));
     };
     
     # laddar ner
     $verbose and print STDERR "downloading \"$path$title\" ... ";
-    my $response=$ua->get($url,@headers);
+
+    my $response=download_get($url,$headers);
     if($response->code == 304){
 	$verbose and warn "not changed\n";
 	return;
-    }
+    };
     if(!$response->is_success){
 	$verbose and warn "\n";
 	die "error: http error: ".$response->status_line."\n";
     };
 
-
-    # undersöker om fil ska laddas ner eller följas
+    # undersöker om fil ska sparas ner eller följas
     if($response->content_type ne 'text/html'){
 	# sparar filer
 	ensure_dir($path);
@@ -192,6 +194,8 @@ sub download{
 	my $link_indent=$indent."  ";
 	my $c=$response->decoded_content;
 	my @items;
+
+	# class="notAuthorization"
 	
 	while ($c=~m|<td\b.*?>(.*?)</td>|sg){
 	    my $td=$1;
@@ -213,6 +217,44 @@ sub download{
 	};
     };
 };
+
+sub download_get{
+    my $url=shift() or die;
+    my $headers=shift() or die;
+    my $try=shift() // 0;
+    # retur : nerladdning av url, försök nr try
+
+    # kollar lokal rate-begränsning
+    if(@downloads > 10){
+	splice(@downloads,0,(@downloads-10));
+	my $sleep=int(10/$rate_limit-(time()-$downloads[0]));
+	if($sleep > 0){
+	    $verbose and print STDERR "waiting ${sleep}s ... ";
+	    sleep $sleep;
+	};
+    };
+    push @downloads,time();
+
+    
+    # provar att hämta ner
+    my $response=$ua->get($url,@$headers);
+
+    # kollar rate-limit-svar på server
+    if($response->content_type eq 'text/html' and $response->decoded_content=~/div class="notAuthorization"/){
+	if($try < 5){
+	    my $sleep=10*($try+1);
+	    $verbose and print STDERR "too fast for server, waiting ${sleep}s ... ";
+	    sleep $sleep;
+	    return download_get($url,$headers,$try+1);
+	}
+	else{
+	    $verbose and warn "\n";
+	    die "error: persistent rate limit page found\n";
+	};
+    };
+
+    return $response;
+}
 
 sub login{
     my $response=shift() or die;
@@ -251,8 +293,6 @@ sub login{
 	};
     };
 
-	print $response->decoded_content;
-	
     # hämtar värden från redirect-sida
     $response->decoded_content=~/form action="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
     my $redir_action=decode_entities($1);
