@@ -282,30 +282,39 @@ sub login{
 	my $login_action=url(decode_entities($1),$response->base)->abs->as_string;
 
 	# loggar in
-	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'submit'=>'LOGGA IN'});
+	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'_eventId_proceed'=>'Logga in'});
 	if(!$response->is_success){
 	    die "error: http error: ".$response->status_line."\n";
 	};
 
 	# kontrollerar om login lyckades
 	my $c=$response->decoded_content;
-	if($c=~/id="login" name="login" action="(.*?)"/ and $c=~/not possible to login with supplied credentials/){
-	    die "error: username or password incorrect\n";
+	if($c=~/id="login" name="login" action="(.*?)"/){
+	    if($c=~/not possible to login with supplied credentials/){
+		die "error: username or password incorrect\n";
+	    }
+	    else{
+		die "error: other login error\n";
+	    };
 	};
     };
 
-    # hämtar värden från redirect-sida
-    $response->decoded_content=~/form action="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
-    my $redir_action=decode_entities($1);
-    $response->decoded_content=~/name="RelayState" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
-    my $rs=decode_entities($1);
-    $response->decoded_content=~/name="SAMLResponse" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
-    my $sr=decode_entities($1);
+    if(not $response->decoded_content=~/class="logout"/){
+	# hanterar manuell redirect
+	
+	# hämtar värden från redirect-sida
+	$response->decoded_content=~/form action="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+	my $redir_action=decode_entities($1);
+	$response->decoded_content=~/name="RelayState" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+	my $rs=decode_entities($1);
+	$response->decoded_content=~/name="SAMLResponse" value="(.*?)"/ or die "error: unknown format on redirect page - perhaps this tool is old\n";
+	my $sr=decode_entities($1);
 
-    # följer redirect
-    $response=$ua->post($redir_action,{'RelayState'=>$rs,'SAMLResponse'=>$sr,'submit'=>'Fortsätt/Continue'});
-    if(!$response->is_success){
-	die "error: http error: ".$response->status_line."\n";
+	# följer redirect
+	$response=$ua->post($redir_action,{'RelayState'=>$rs,'SAMLResponse'=>$sr,'submit'=>'Fortsätt/Continue'});
+	if(!$response->is_success){
+	    die "error: http error: ".$response->status_line."\n";
+	};
     };
 
     return $response;
