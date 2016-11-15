@@ -200,7 +200,8 @@ sub download{
 	
 	while ($c=~m|<td\b.*?>(.*?)</td>|sg){
 	    my $td=$1;
-	    if($td=~m|href="(/portal/authsec/portal/uusp/student/filearea/filearea-window\?\S*?)"\s*>[\s\r\n]*<b>(.*?)</b>|s){
+	    # matchar två länkar (ikon och filnamn), hoppar över den första
+	    if($td=~m|href=".*?href="(/portal/authsec/portal/uusp/student/filearea/filearea-window\?mode=view\S*?)">[\s\r\n]*(.*?)[\s\r\n]*</a>|s){
 		my $link_url=url(decode_entities($1),$response->base)->abs->as_string;
 		my $link_title=slugify($2);
 		push @items,[$link_url,$done,$link_title,$link_indent,$link_path];
