@@ -99,13 +99,18 @@ if($response->decoded_content=~/class="logout"/){
 else{
     die "error: login failed\n";
 }
-
 # hämtar filareor
 my $done={};
 my $c=$response->decoded_content;
-while ($c=~m|<a.*?[\s\r\n]*href="(/portal/portal/uusp/student/filearea\?.*?)"[\s\r\n]*.*?[\r\n\s]*>[\s\r\n]*<span .*?>(.*?)</span>[\s\r\n]*</a>|g){
-    my $title=slugify($2);
-    my $url=url(decode_entities($1),$response->base)->abs->as_string;
+
+while ($c=~m|<a[\s\r\n]+.*?href="(/portal/portal/uusp/student/filearea\?.*?)"[\s\r\n]*.*?[\s\r\n]*>(.*?)</a>|sg){
+    my $raw_url=$1;
+    my $raw_content=$2;
+    # plocka ur titel ur länk
+    my $raw_title=($raw_content=~s/\<.*?\>//sgr)=~s/^[\s\r\n]*(.*?)[\s\r\n]*$/$1/sgr;
+    $raw_title or $raw_title='nameless';
+    my $title=slugify($raw_title);
+    my $url=url(decode_entities($raw_url),$response->base)->abs->as_string;
     download($url,$done,$title,'','');
 };
 
