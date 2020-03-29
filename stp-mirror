@@ -22,6 +22,7 @@ use LWP;
 use LWP::UserAgent;
 use Getopt::Long;
 use HTML::Entities;
+use HTML::TreeBuilder 5 -weak;
 require HTTP::Date;
 use URI::URL;
 use URI::Escape;
@@ -100,14 +101,20 @@ else{
     die "error: login failed\n";
 }
 # hämtar filareor
+my $e;
 my $done={};
-my $c=$response->decoded_content;
+my $tree=HTML::TreeBuilder->new_from_content($response->decoded_content);
 
-while ($c=~m|<a[\s\r\n]+.*?href="(/portal/portal/uusp/student/filearea\?.*?)"[\s\r\n]*.*?[\s\r\n]*>(.*?)</a>|sg){
-    my $raw_url=$1;
-    my $raw_content=$2;
-    # plocka ur titel ur länk
-    my $raw_title=($raw_content=~s/\<.*?\>//sgr)=~s/^[\s\r\n]*(.*?)[\s\r\n]*$/$1/sgr;
+# plocka bort event-sektion och länkar
+for $e ($tree->look_down('_tag'=>'div','class'=>'events')){
+    $e->delete();
+};
+
+# hämtar länkar
+for $e ($tree->look_down('_tag'=>'a','href'=>qr|^/portal/portal/uusp/student/filearea\?|)){
+    my $raw_url=$e->attr('href'); 
+    my $raw_title=$e->as_text();
+    $raw_title=~s/^[\s\r\n]*(.*?)[\s\r\n]*$/$1/sg;
     $raw_title or $raw_title='nameless';
     my $title=slugify($raw_title);
     my $url=url(decode_entities($raw_url),$response->base)->abs->as_string;
