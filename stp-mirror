@@ -79,14 +79,13 @@ my $ua=new Agent();
 $ua->agent($agent);
 $ua->cookie_jar({file=>"$config/cookies.txt",autosave=>1,ignore_discard=>1});
 $ua->requests_redirectable(['GET','HEAD','POST']);
-
 # ---- main ----
 
 # hämtar kurssida
 $verbose > 1 and warn "checking start page\n";
 my $response=$ua->get($page);
 if(!$response->is_success){
-    die "error: http error: ".$response->status_line."\n";
+    die "error: http error fetching start page: ".$response->status_line."\n";
 };
 
 # provar att logga in vid behov
@@ -180,7 +179,7 @@ sub download{
     };
     if(!$response->is_success){
 	$verbose > 1 and warn "\n";
-	die "error: http error: ".$response->status_line."\n";
+	die "error: http error downloading: ".$response->status_line."\n";
     };
 
     # undersöker om fil ska sparas ner eller följas
@@ -284,20 +283,22 @@ sub login{
     # hämtar login-sida (kan också vara redirect-sida)
     $response=$ua->get($login_link);
     if(!$response->is_success){
-	die "error: http error: ".$response->status_line."\n";
+	die "error: http fetching login page error: ".$response->status_line."\n";
     };
 
     # loggar in på CAS om det behövs
     if(not $response->decoded_content=~/name="SAMLResponse" value="(.*?)"/){
 
 	# kontrollerar login-sida
-	$response->decoded_content=~/id="login" name="login" action="(.*?)"/ or die "error: unknown format on login page - perhaps this tool is old\n";
+	$response->decoded_content=~/id="login" name="login" action="(.*?)"/ or die "error: could not find action on login page - perhaps this tool is old\n";
 	my $login_action=url(decode_entities($1),$response->base)->abs->as_string;
+	$response->decoded_content=~/type="hidden" name="csrf_token" value="(.*?)"/ or die "error: could not find CSRF token on login page - perhaps this tool is old\n";
+	my $csrf=$1;
 
 	# loggar in
-	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'_eventId_proceed'=>'Logga in'});
+	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'csrf_token'=>$csrf,'_eventId_proceed'=>'Logga in'});
 	if(!$response->is_success){
-	    die "error: http error: ".$response->status_line."\n";
+	    die "error: http error posting login: ".$response->status_line."\n";
 	};
 
 	# kontrollerar om login lyckades
@@ -326,7 +327,7 @@ sub login{
 	# följer redirect
 	$response=$ua->post($redir_action,{'RelayState'=>$rs,'SAMLResponse'=>$sr,'submit'=>'Fortsätt/Continue'});
 	if(!$response->is_success){
-	    die "error: http error: ".$response->status_line."\n";
+	    die "error: http error posting continue: ".$response->status_line."\n";
 	};
     };
 
