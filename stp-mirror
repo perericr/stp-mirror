@@ -276,14 +276,16 @@ sub login{
 
     $verbose > 1 and warn "logging in\n";
 
-    # kontrollerar huvudsida
-    $response->decoded_content=~/id="loginLink" href="(.*?)"/ or die "error: unknown format on main page - perhaps this tool is old\n";
-    my $login_link=url(decode_entities($1),$response->base)->abs->as_string;
+    # hämtar CAS login-sida om inte där reda
+    if(!$response->decoded_content=~/id="login" name="login" action="(.*?)"/){
+	$response->decoded_content=~/id="loginLink" href="(.*?)"/ or die "error: unknown format on main page - perhaps this tool is old\n";
+	my $login_link=url(decode_entities($1),$response->base)->abs->as_string;
 
-    # hämtar login-sida (kan också vara redirect-sida)
-    $response=$ua->get($login_link);
-    if(!$response->is_success){
-	die "error: http fetching login page error: ".$response->status_line."\n";
+	# hämtar login-sida (kan också vara redirect-sida)
+	$response=$ua->get($login_link);
+	if(!$response->is_success){
+	    die "error: http fetching login page error: ".$response->status_line."\n";
+	};
     };
 
     # loggar in på CAS om det behövs
