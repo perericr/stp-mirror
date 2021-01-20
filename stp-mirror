@@ -275,13 +275,17 @@ sub login{
     # retur : nytt response med sida efter inloggning 
 
     $verbose > 1 and warn "logging in\n";
+   
+    # RE for action on login page
+    my $action_re='id="login" name="login" action="(.*?)"';
 
     # hämtar CAS login-sida om inte där reda
-    if(!$response->decoded_content=~/id="login" name="login" action="(.*?)"/){
+    if(not $response->decoded_content=~/$action_re/){
 	$response->decoded_content=~/id="loginLink" href="(.*?)"/ or die "error: unknown format on main page - perhaps this tool is old\n";
 	my $login_link=url(decode_entities($1),$response->base)->abs->as_string;
 
 	# hämtar login-sida (kan också vara redirect-sida)
+	$verbose > 2 and warn "  fetching login page\n";
 	$response=$ua->get($login_link);
 	if(!$response->is_success){
 	    die "error: http fetching login page error: ".$response->status_line."\n";
@@ -292,12 +296,13 @@ sub login{
     if(not $response->decoded_content=~/name="SAMLResponse" value="(.*?)"/){
 
 	# kontrollerar login-sida
-	$response->decoded_content=~/id="login" name="login" action="(.*?)"/ or die "error: could not find action on login page - perhaps this tool is old\n";
+	$response->decoded_content=~/$action_re/ or die "error: could not find action on login page - perhaps this tool is old\n";
 	my $login_action=url(decode_entities($1),$response->base)->abs->as_string;
 	$response->decoded_content=~/type="hidden" name="csrf_token" value="(.*?)"/ or die "error: could not find CSRF token on login page - perhaps this tool is old\n";
 	my $csrf=$1;
 
 	# loggar in
+	$verbose > 2 and warn "  posting login\n";
 	$response=$ua->post($login_action,{'j_username'=>$login,'j_password'=>$password,'csrf_token'=>$csrf,'_eventId_proceed'=>'Logga in'});
 	if(!$response->is_success){
 	    die "error: http error posting login: ".$response->status_line."\n";
@@ -327,6 +332,7 @@ sub login{
 	my $sr=decode_entities($1);
 
 	# följer redirect
+	$verbose > 2 and warn "  following redirect\n";
 	$response=$ua->post($redir_action,{'RelayState'=>$rs,'SAMLResponse'=>$sr,'submit'=>'Fortsätt/Continue'});
 	if(!$response->is_success){
 	    die "error: http error posting continue: ".$response->status_line."\n";
